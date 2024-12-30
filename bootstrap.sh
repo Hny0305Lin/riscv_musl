@@ -755,10 +755,20 @@ build_gdb()
 #
 
 make_directories
+download_prerequisites
+extract_archives
+patch_musl
+patch_gcc
 
-# 将工具链目录添加到PATH
-export PATH=${PREFIX}/bin:${PATH}
+# 按顺序构建所有组件
+build_gmp             host
+build_mpfr            host
+build_mpc             host
+build_isl             host
+build_cloog           host
+build_binutils        host ${PREFIX} / transform-name
 
+# 在binutils构建完成后再检查工具链
 # 检查工具链是否可用
 check_toolchain() {
   echo "Checking toolchain..."
@@ -773,21 +783,11 @@ check_toolchain() {
   echo "Toolchain check passed"
 }
 
-# 在开始构建之前检查工具链
+# 将工具链目录添加到PATH
+export PATH=${PREFIX}/bin:${PATH}
+
+# 在binutils构建后检查工具链
 check_toolchain
-
-download_prerequisites
-extract_archives
-patch_musl
-patch_gcc
-
-# 按顺序构建所有组件
-build_gmp             host
-build_mpfr            host
-build_mpc             host
-build_isl             host
-build_cloog           host
-build_binutils        host ${PREFIX} / transform-name
 
 configure_musl
 install_musl_headers
@@ -796,7 +796,7 @@ install_linux_headers
 build_gcc_stage1      host ${PREFIX} / transform-name
 build_musl
 build_gcc_stage2      host ${PREFIX} / transform-name
-build_gdb            host ${PREFIX} / transform-name
+build_gdb             host ${PREFIX} / transform-name
 
 
 #
