@@ -482,19 +482,6 @@ patch_gcc()
   test "$?" -eq "0" || exit 1
 }
 
-# 添加新的patch_binutils函数
-patch_binutils()
-{
-  test -f src/binutils-${binutils_version}/.patched || (
-    set -e
-    cd src/binutils-${binutils_version}
-    # 应用gold链接器补丁
-    patch -p1 < ../../patches/binutils-gold-include.patch
-    touch .patched
-  )
-  test "$?" -eq "0" || exit 1
-}
-
 # BINUTILS (binutils_version=2.31.1)
 build_binutils()
 {
@@ -506,19 +493,11 @@ build_binutils()
     set -e
     test -d build/binutils-${host}-${ARCH} || mkdir build/binutils-${host}-${ARCH}
     cd build/binutils-${host}-${ARCH}
-    CFLAGS="${COMMON_FLAGS} -fPIE" \
-    CXXFLAGS="${COMMON_FLAGS} -fPIE -include string" \
-    LDFLAGS="${LDFLAGS_FOR_BUILD}" \
-    ../../src/binutils-${binutils_version}/configure \
+    CFLAGS=-fPIE ../../src/binutils-${binutils_version}/configure \
         --prefix=${prefix} \
         --target=${TARGET:=$TRIPLE} ${WITHARCH} \
         ${transform:+--program-transform-name='s&^&'${TRIPLE}'-&'} \
         --with-sysroot=${SYSROOT} \
-        --libdir=${prefix}/lib \
-        --with-slibdir=${prefix}/lib \
-        --enable-plugins \
-        --disable-gold \
-        --enable-ld=default \
         --disable-nls \
         --disable-libssp \
         --disable-shared \
@@ -531,12 +510,7 @@ build_binutils()
         ${build_graphite:+--with-isl=${TOPDIR}/build/install-${host}} \
         ${build_graphite:+--with-cloog=${TOPDIR}/build/install-${host}} \
         $*
-    make -j$(nproc) all-binutils all-gas all-ld
-    make DESTDIR=${destdir} install-binutils install-gas install-ld
-    
-    # 创建bfd-plugins目录
-    mkdir -p ${destdir}${prefix}/lib/bfd-plugins
-    
+    make -j$(nproc) && make DESTDIR=${destdir} install
   ) && touch stamps/binutils-${host}-${ARCH}
   test "$?" -eq "0" || exit 1
 }
@@ -763,7 +737,6 @@ download_prerequisites
 extract_archives
 patch_musl
 patch_gcc
-patch_binutils
 
 # 按顺序构建所有组件
 build_gmp             host
@@ -772,37 +745,13 @@ build_mpc             host
 build_isl             host
 build_cloog           host
 build_binutils        host ${PREFIX} / transform-name
-
-# 在binutils构建完成后再检查工具链
-# 检查工具链是否可用
-check_toolchain() {
-  echo "Checking toolchain..."
-  if [ ! -x "${PREFIX}/bin/${TRIPLE}-gcc" ]; then
-    echo "Error: gcc not found at ${PREFIX}/bin/${TRIPLE}-gcc"
-    exit 1
-  fi
-  if [ ! -x "${PREFIX}/bin/${TRIPLE}-ld" ]; then
-    echo "Error: ld not found at ${PREFIX}/bin/${TRIPLE}-ld"
-    exit 1
-  fi
-  echo "Toolchain check passed"
-}
-
-# 将工具链目录添加到PATH
-export PATH=${PREFIX}/bin:${PATH}
-
-# 在binutils构建后检查工具链
-check_toolchain
-
 configure_musl
 install_musl_headers
 install_linux_headers
-
 build_gcc_stage1      host ${PREFIX} / transform-name
 build_musl
 build_gcc_stage2      host ${PREFIX} / transform-name
 build_gdb             host ${PREFIX} / transform-name
-
 
 #
 # 如果指定了native-cross选项，为目标架构构建本地工具链
@@ -819,5 +768,5 @@ if [ "$2" = "native-cross" ]; then
   build_cloog           ${ARCH} --host=${TRIPLE}
   build_binutils        ${ARCH} /usr ${SYSROOT} '' --host=${TRIPLE}
   build_gcc_stage2      ${ARCH} /usr ${SYSROOT} '' --host=${TRIPLE}
-  build_gdb            ${ARCH} /usr ${SYSROOT} '' --host=${TRIPLE}
+  build_gdb             ${ARCH} /usr ${SYSROOT} '' --host=${TRIPLE}
 fi
