@@ -55,6 +55,7 @@ show_usage() {
     echo "  -m, --mirror <镜像源>    指定镜像源 (default|china|ustc)"
     echo "  -n, --native-cross      同时构建本地编译器"
     echo "  -c, --component <组件>   只构建指定组件(gmp|mpfr|mpc|isl|cloog|binutils|gcc1|gcc2|musl|gdb)"
+    echo "  --clean [组件]          清理环境(不指定组件则清理全部)"
     echo "  -h, --help              显示此帮助信息"
     echo ""
     echo "支持的架构:"
@@ -64,6 +65,50 @@ show_usage() {
     echo "  $0 -m default aarch64             # 使用默认镜像源构建ARM64交叉编译器"
     echo "  $0 -m china -n riscv64            # 使用清华镜像源构建RISC-V 64位交叉编译器和本地编译器"
     echo "  $0 -m ustc x86_64                 # 使用中科大镜像源构建x86_64交叉编译器"
+}
+
+# 添加清理单个组件的函数
+clean_component() {
+    local component=$1
+    case "$component" in
+        gmp)
+            rm -rf build/gmp-* stamps/lib-gmp-* src/gmp-*
+            ;;
+        mpfr)
+            rm -rf build/mpfr-* stamps/lib-mpfr-* src/mpfr-*
+            ;;
+        mpc)
+            rm -rf build/mpc-* stamps/lib-mpc-* src/mpc-*
+            ;;
+        isl)
+            rm -rf build/isl-* stamps/lib-isl-* src/isl-*
+            ;;
+        cloog)
+            rm -rf build/cloog-* stamps/lib-cloog-* src/cloog-*
+            ;;
+        binutils)
+            rm -rf build/binutils-* stamps/binutils-* src/binutils-*
+            ;;
+        gcc1|gcc2)
+            rm -rf build/gcc-* stamps/gcc-* src/gcc-*
+            ;;
+        musl)
+            rm -rf build/musl-* stamps/musl-* src/musl-*
+            ;;
+        gdb)
+            rm -rf build/gdb-* stamps/gdb-* src/gdb-*
+            ;;
+        all)
+            echo "正在清理所有构建环境..."
+            rm -rf build stamps archives src ${PREFIX}
+            ;;
+        *)
+            echo "错误: 未知的组件 '$component'"
+            echo "可清理的组件: gmp, mpfr, mpc, isl, cloog, binutils, gcc1, gcc2, musl, gdb, all"
+            exit 1
+            ;;
+    esac
+    echo "已清理组件: $component"
 }
 
 # 解析命令行参数
@@ -85,9 +130,14 @@ while [[ $# -gt 0 ]]; do
             show_usage
             exit 0
             ;;
-        clean)
-            echo "正在清理构建环境..."
-            rm -rf build stamps archives src ${PREFIX}
+        --clean)
+            if [ -n "$2" ] && [[ "$2" != -* ]]; then
+                clean_component "$2"
+                shift 2
+            else
+                clean_component "all"
+                shift
+            fi
             exit 0
             ;;
         riscv32|riscv64|i386|x86_64|aarch64)
