@@ -46,6 +46,7 @@
 MIRROR="default"  # 默认镜像源
 ARCH_TYPE=""      # 目标架构
 BUILD_TYPE=""     # 构建类型
+COMPONENT=""      # 组件
 
 # 显示帮助信息
 show_usage() {
@@ -53,6 +54,7 @@ show_usage() {
     echo "选项:"
     echo "  -m, --mirror <镜像源>    指定镜像源 (default|china|ustc)"
     echo "  -n, --native-cross      同时构建本地编译器"
+    echo "  -c, --component <组件>   只构建指定组件(gmp|mpfr|mpc|isl|cloog|binutils|gcc1|gcc2|musl|gdb)"
     echo "  -h, --help              显示此帮助信息"
     echo ""
     echo "支持的架构:"
@@ -74,6 +76,10 @@ while [[ $# -gt 0 ]]; do
         -n|--native-cross)
             BUILD_TYPE="native-cross"
             shift
+            ;;
+        -c|--component)
+            COMPONENT="$2"
+            shift 2
             ;;
         -h|--help)
             show_usage
@@ -635,27 +641,73 @@ build_gdb()
 # build musl libc toolchain for host
 #
 
-make_directories
-download_prerequisites
-extract_archives
-patch_musl
-patch_gcc
+if [ -n "$COMPONENT" ]; then
+    # 单个组件构建模式
+    case "$COMPONENT" in
+        gmp)
+            build_gmp host
+            ;;
+        mpfr)
+            build_mpfr host
+            ;;
+        mpc)
+            build_mpc host
+            ;;
+        isl)
+            build_isl host
+            ;;
+        cloog)
+            build_cloog host
+            ;;
+        binutils)
+            build_binutils host ${PREFIX} / transform-name
+            ;;
+        gcc1)
+            build_gcc_stage1 host ${PREFIX} / transform-name
+            ;;
+        gcc2)
+            build_gcc_stage2 host ${PREFIX} / transform-name
+            ;;
+        musl)
+            configure_musl
+            install_musl_headers
+            build_musl
+            ;;
+        gdb)
+            build_gdb host ${PREFIX} / transform-name
+            ;;
+        *)
+            echo "错误: 未知的组件 '$COMPONENT'"
+            echo "可用组件: gmp, mpfr, mpc, isl, cloog, binutils, gcc1, gcc2, musl, gdb"
+            exit 1
+            ;;
+    esac
+else
+    # 原有的完整构建流程
+    make_directories
+    download_prerequisites
+    extract_archives
+    patch_musl
+    patch_gcc
 
-build_gmp             host
-build_mpfr            host
-build_mpc             host
-build_isl             host
-build_cloog           host
-build_binutils        host ${PREFIX} / transform-name
+    build_gmp             host
+    build_mpfr            host
+    build_mpc             host
+    build_isl             host
+    build_cloog           host
+    build_binutils        host ${PREFIX} / transform-name
 
-configure_musl
-install_musl_headers
-install_linux_headers
+    configure_musl
+    install_musl_headers
+    install_linux_headers
 
-build_gcc_stage1      host ${PREFIX} / transform-name
-build_musl
-build_gcc_stage2      host ${PREFIX} / transform-name
-build_gdb            host ${PREFIX} / transform-name
+    build_gcc_stage1      host ${PREFIX} / transform-name
+    build_musl
+    build_gcc_stage2      host ${PREFIX} / transform-name
+    build_gdb             host ${PREFIX} / transform-name
+
+    # native-cross 部分保持不变...
+fi
 
 
 #
