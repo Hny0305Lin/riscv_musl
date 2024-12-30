@@ -405,6 +405,10 @@ configure_musl()
     echo RANLIB=${PREFIX}/bin/${TRIPLE}-ranlib >> config.mak
     # 添加工具链目录到PATH
     echo PATH=${PREFIX}/bin:\${PATH} >> config.mak
+    # 添加链接器标志
+    echo LDFLAGS=-B${PREFIX}/bin >> config.mak
+    # 添加交叉编译前缀
+    echo CROSS_COMPILE=${PREFIX}/bin/${TRIPLE}- >> config.mak
   ) && touch stamps/musl-config-${ARCH}
   test "$?" -eq "0" || exit 1
 }
@@ -433,8 +437,15 @@ build_musl()
     cd build/musl-${ARCH}
     # 确保工具链在PATH中
     export PATH=${PREFIX}/bin:${PATH}
+    # 显式设置链接器路径
+    export LD=${PREFIX}/bin/${TRIPLE}-ld
+    # 设置LDFLAGS以使用正确的链接器
+    export LDFLAGS="-B${PREFIX}/bin"
     # 编译musl
-    make -j$(nproc)
+    make -j$(nproc) \
+      CROSS_COMPILE=${PREFIX}/bin/${TRIPLE}- \
+      LD="${PREFIX}/bin/${TRIPLE}-ld" \
+      LDFLAGS="${LDFLAGS}"
     # 安装库文件到sysroot
     make DESTDIR=${SYSROOT} install-libs
   ) && touch stamps/musl-dynamic-${ARCH}
@@ -747,6 +758,23 @@ make_directories
 
 # 将工具链目录添加到PATH
 export PATH=${PREFIX}/bin:${PATH}
+
+# 检查工具链是否可用
+check_toolchain() {
+  echo "Checking toolchain..."
+  if [ ! -x "${PREFIX}/bin/${TRIPLE}-gcc" ]; then
+    echo "Error: gcc not found at ${PREFIX}/bin/${TRIPLE}-gcc"
+    exit 1
+  fi
+  if [ ! -x "${PREFIX}/bin/${TRIPLE}-ld" ]; then
+    echo "Error: ld not found at ${PREFIX}/bin/${TRIPLE}-ld"
+    exit 1
+  fi
+  echo "Toolchain check passed"
+}
+
+# 在开始构建之前检查工具链
+check_toolchain
 
 download_prerequisites
 extract_archives
