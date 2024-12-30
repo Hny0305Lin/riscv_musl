@@ -403,6 +403,8 @@ configure_musl()
     echo LD=${PREFIX}/bin/${TRIPLE}-ld >> config.mak
     echo AR=${PREFIX}/bin/${TRIPLE}-ar >> config.mak
     echo RANLIB=${PREFIX}/bin/${TRIPLE}-ranlib >> config.mak
+    # 添加工具链目录到PATH
+    echo PATH=${PREFIX}/bin:\${PATH} >> config.mak
   ) && touch stamps/musl-config-${ARCH}
   test "$?" -eq "0" || exit 1
 }
@@ -429,6 +431,8 @@ build_musl()
   test -f stamps/musl-dynamic-${ARCH} || (
     set -e
     cd build/musl-${ARCH}
+    # 确保工具链在PATH中
+    export PATH=${PREFIX}/bin:${PATH}
     # 编译musl
     make -j$(nproc)
     # 安装库文件到sysroot
@@ -740,6 +744,10 @@ build_gdb()
 #
 
 make_directories
+
+# 将工具链目录添加到PATH
+export PATH=${PREFIX}/bin:${PATH}
+
 download_prerequisites
 extract_archives
 patch_musl
