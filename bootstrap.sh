@@ -21,8 +21,6 @@
 # - x86_64
 # - aarch64
 #
-# ## Tips: 最好在x86_64架构下运行其他架构的编译
-#
 # ## 目录结构
 #
 # - ${bootstrap_prefix}-${gcc_version}-${bootstrap_version}
@@ -45,124 +43,80 @@
 # 
 # 同时，我们将会提供浩瀚银河镜像源 + 海星通社区镜像源无条件维护，为鸿蒙星闪开发者们提供良好国内环境
 
-# utility functions
-clean_build()
-{
-    rm -rf build stamps src
+MIRROR="default"  # 默认镜像源
+ARCH_TYPE=""      # 目标架构
+BUILD_TYPE=""     # 构建类型
+
+# 显示帮助信息
+show_usage() {
+    echo "用法: $0 [选项] <架构>"
+    echo "选项:"
+    echo "  -m, --mirror <镜像源>    指定镜像源 (default|china|ustc)"
+    echo "  -n, --native-cross      同时构建本地编译器"
+    echo "  -h, --help              显示此帮助信息"
+    echo ""
+    echo "支持的架构:"
+    echo "  riscv32, riscv64, i386, x86_64, aarch64"
+    echo ""
+    echo "示例:"
+    echo "  $0 -m china riscv64              # 使用清华镜像源构建RISC-V 64位交叉编译器"
+    echo "  $0 -m ustc -n aarch64            # 使用中科大镜像源构建ARM64交叉编译器和本地编译器"
+    echo "  $0 --mirror haohanyh riscv64     # 使用浩瀚银河镜像源构建RISC-V 64位交叉编译器"
 }
 
-# GMP (gmp_version=6.1.2)
-build_gmp()
-{
-  host=$1; shift
-  test -f stamps/lib-gmp-${host} || (
-    set -e
-    test -d build/gmp-${host} || mkdir build/gmp-${host}
-    cd build/gmp-${host}
-    CFLAGS=-fPIE ../../src/gmp-${gmp_version}/configure \
-        --disable-shared \
-        --prefix=${TOPDIR}/build/install-${host} \
-        $*
-    make -j$(nproc) && make install
-  ) && touch stamps/lib-gmp-${host}
-  test "$?" -eq "0" || exit 1
-}
+# 解析命令行参数
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -m|--mirror)
+            MIRROR="$2"
+            shift 2
+            ;;
+        -n|--native-cross)
+            BUILD_TYPE="native-cross"
+            shift
+            ;;
+        -h|--help)
+            show_usage
+            exit 0
+            ;;
+        clean)
+            echo "Cleaning build environment..."
+            rm -rf build stamps archives src ${PREFIX}
+            exit 0
+            ;;
+        riscv32|riscv64|i386|x86_64|aarch64)
+            ARCH_TYPE="$1"
+            shift
+            ;;
+        *)
+            echo "错误: 未知的选项或架构 '$1'"
+            show_usage
+            exit 1
+            ;;
+    esac
+done
 
-# MPFR (mpfr_version=3.1.4)
-build_mpfr()
-{
-  host=$1; shift
-  test -f stamps/lib-mpfr-${host} || (
-    set -e
-    test -d build/mpfr-${host} || mkdir build/mpfr-${host}
-    cd build/mpfr-${host}
-    CFLAGS=-fPIE ../../src/mpfr-${mpfr_version}/configure \
-        --disable-shared \
-        --prefix=${TOPDIR}/build/install-${host} \
-        --with-gmp=${TOPDIR}/build/install-${host} \
-        $*
-    make -j$(nproc) && make install
-  ) && touch stamps/lib-mpfr-${host}
-  test "$?" -eq "0" || exit 1
-}
+# 验证必要参数
+if [ -z "$ARCH_TYPE" ]; then
+    echo "错误: 必须指定目标架构"
+    show_usage
+    exit 1
+fi
 
-# MPC (mpc_version=1.0.3)
-build_mpc()
-{
-  host=$1; shift
-  test -f stamps/lib-mpc-${host} || (
-    set -e
-    test -d build/mpc-${host} || mkdir build/mpc-${host}
-    cd build/mpc-${host}
-    CFLAGS=-fPIE ../../src/mpc-${mpc_version}/configure \
-        --disable-shared \
-        --prefix=${TOPDIR}/build/install-${host} \
-        --with-gmp=${TOPDIR}/build/install-${host} \
-        --with-mpfr=${TOPDIR}/build/install-${host} \
-        $*
-    make -j$(nproc) && make install
-  ) && touch stamps/lib-mpc-${host}
-  test "$?" -eq "0" || exit 1
-}
-
-# ISL (isl_version=0.16.1)
-build_isl()
-{
-  host=$1; shift
-  if [ "${build_graphite}" = "yes" ]; then
-    test -f stamps/lib-isl-${host} || (
-      set -e
-      test -d build/isl-${host} || mkdir build/isl-${host}
-      cd build/isl-${host}
-      CFLAGS=-fPIE ../../src/isl-${isl_version}/configure \
-          --disable-shared \
-          --prefix=${TOPDIR}/build/install-${host} \
-          --with-gmp-prefix=${TOPDIR}/build/install-${host} \
-          $*
-      make -j$(nproc) && make install
-    ) && touch stamps/lib-isl-${host}
-    test "$?" -eq "0" || exit 1
-  fi
-}
-
-# CLOOG (cloog_version=0.18.4)
-build_cloog()
-{
-  host=$1; shift
-  if [ "${build_graphite}" = "yes" ]; then
-    test -f stamps/lib-cloog-${host} || (
-      set -e
-      test -d build/cloog-${host} || mkdir build/cloog-${host}
-      cd build/cloog-${host}
-      CFLAGS=-fPIE ../../src/cloog-${cloog_version}/configure \
-          --disable-shared \
-          --prefix=${TOPDIR}/build/install-${host} \
-          --with-isl-prefix=${TOPDIR}/build/install-${host} \
-          --with-gmp-prefix=${TOPDIR}/build/install-${host} \
-          $*
-      make -j$(nproc) && make install
-    ) && touch stamps/lib-cloog-${host}
-    test "$?" -eq "0" || exit 1
-  fi
-}
-
-case "$1" in
-    clean)
-        clean_build
-        exit 0
+# 验证镜像源
+case "$MIRROR" in
+    default|china|ustc|haohanyh)
+        DEFAULT_MIRROR="$MIRROR"
         ;;
-    mirror)
-        DEFAULT_MIRROR="$2"
-        shift 2
+    *)
+        echo "错误: 不支持的镜像源 '$MIRROR'"
+        show_usage
+        exit 1
         ;;
-    all)
-        for arch in riscv32 riscv64 i386 x86_64 aarch64; do
-            echo "Building for $arch..."
-            ./$0 ${2:+mirror $2} $arch || exit 1
-            echo "Completed $arch build"
-        done
-        exit 0
-        ;;
+esac
+
+# 设置架构相关参数
+case "$ARCH_TYPE" in
     riscv32)
         ARCH=riscv32
         LINUX_ARCH=riscv
@@ -189,7 +143,7 @@ case "$1" in
         WITHARCH=--with-arch=armv8-a
         ;;
     *)
-        echo "Usage: $0 {riscv32|riscv64|i386|x86_64|aarch64}"
+        echo "Usage: $0 {clean|riscv32|riscv64|i386|x86_64|aarch64}"
         exit 1
 esac
 
@@ -202,16 +156,10 @@ mpc_version=1.0.3
 isl_version=0.16.1
 cloog_version=0.18.4
 binutils_version=2.31.1
+gcc_version=8.2.0
 musl_version=1.1.18-riscv-a6
 linux_version=4.18
-gcc_version=8.2.0
-gdb_version=15.1
-
-# optimization flags for size
-COMMON_FLAGS="-Os -ffunction-sections -fdata-sections -fno-unwind-tables -fno-asynchronous-unwind-tables"
-CFLAGS_FOR_BUILD="${COMMON_FLAGS}"
-CXXFLAGS_FOR_BUILD="${COMMON_FLAGS}"
-LDFLAGS_FOR_BUILD="-Wl,--gc-sections"
+gdb_version=8.2
 
 # bootstrap install prefix and version
 bootstrap_prefix=/opt/riscv/musl-riscv-toolchain
@@ -224,7 +172,6 @@ SYSROOT=${PREFIX}/${TARGET:=$TRIPLE}
 TOPDIR=$(pwd)
 
 # mirror sites
-DEFAULT_MIRROR="default"
 declare -A MIRROR_SITES=(
     # default urls 默认配置
     ["default:gmp"]="https://gmplib.org/download/gmp-${gmp_version}"
@@ -238,12 +185,6 @@ declare -A MIRROR_SITES=(
     ["default:gcc"]="http://ftp.gnu.org/gnu/gcc/gcc-${gcc_version}"
     ["default:gdb"]="https://ftp.gnu.org/gnu/gdb"
 
-    # github mirror (histarcom海星通社区源，暂时留空) 海星通社区源为指定版本, 不存储其他版本, 浩瀚银河维护者维护
-
-
-
-    
-    
     # china mirror (清华镜像) 清华缺少isl, cloog, musl
     ["china:gmp"]="https://mirrors.tuna.tsinghua.edu.cn/gnu/gmp"
     ["china:mpfr"]="https://mirrors.tuna.tsinghua.edu.cn/gnu/mpfr"
@@ -267,18 +208,6 @@ declare -A MIRROR_SITES=(
     ["ustc:linux"]="https://cdn.kernel.org/pub/linux/kernel/v4.x"
     ["ustc:gcc"]="https://mirrors.ustc.edu.cn/gnu/gcc/gcc-${gcc_version}"
     ["ustc:gdb"]="https://mirrors.ustc.edu.cn/gnu/gdb"
-
-    # haohanyh mirror (浩瀚银河福州大本营镜像) 浩瀚银河镜像源为指定版本, 不存储其他版本, 敬请谅解
-    ["haohanyh:gmp"]="https://mirrors.haohanyh.com/gnu/gmp"
-    ["haohanyh:mpfr"]="https://mirrors.haohanyh.com/gnu/mpfr"
-    ["haohanyh:mpc"]="https://mirrors.haohanyh.com/gnu/mpc"
-    ["haohanyh:isl"]="https://mirrors.haohanyh.com/gcc/infrastructure"
-    ["haohanyh:cloog"]="http://www.bastoul.net/cloog/pages/download"
-    ["haohanyh:binutils"]="https://mirrors.haohanyh.com/gnu/binutils"
-    ["haohanyh:musl"]="https://mirrors.haohanyh.com/github-release/rv8-io/musl-riscv"
-    ["haohanyh:linux"]="https://mirrors.haohanyh.com/kernel/v4.x"
-    ["haohanyh:gcc"]="https://mirrors.haohanyh.com/gnu/gcc/gcc-${gcc_version}"
-    ["haohanyh:gdb"]="https://mirrors.haohanyh.com/gnu/gdb"
 )
 
 make_directories()
@@ -292,64 +221,51 @@ make_directories()
 
 download_prerequisites()
 {
-  # 使用指定的镜像源或默认源
-  local mirror=${1:-$DEFAULT_MIRROR}
+  local mirror_key="${DEFAULT_MIRROR}"
   
-  # GMP
-  local gmp_url="${MIRROR_SITES["${mirror}:gmp"]}/gmp-${gmp_version}.tar.bz2"
   test -f archives/gmp-${gmp_version}.tar.bz2 || \
-      curl -o archives/gmp-${gmp_version}.tar.bz2 ${gmp_url}
-
-  # MPFR  
-  local mpfr_url="${MIRROR_SITES["${mirror}:mpfr"]}/mpfr-${mpfr_version}.tar.bz2"
+      curl -o archives/gmp-${gmp_version}.tar.bz2 \
+      "${MIRROR_SITES[${mirror_key}:gmp]}/gmp-${gmp_version}.tar.bz2"
+      
   test -f archives/mpfr-${mpfr_version}.tar.bz2 || \
-      curl -o archives/mpfr-${mpfr_version}.tar.bz2 ${mpfr_url}
-
-  # MPC
-  local mpc_url="${MIRROR_SITES[${mirror}:mpc]}/mpc-${mpc_version}.tar.gz"
+      curl -o archives/mpfr-${mpfr_version}.tar.bz2 \
+      "${MIRROR_SITES[${mirror_key}:mpfr]}/mpfr-${mpfr_version}.tar.bz2"
+      
   test -f archives/mpc-${mpc_version}.tar.gz || \
-      curl -o archives/mpc-${mpc_version}.tar.gz ${mpc_url}
-
-  # ISL
-  local isl_url="${MIRROR_SITES[${mirror}:isl]}/isl-${isl_version}.tar.bz2"
+      curl -o archives/mpc-${mpc_version}.tar.gz \
+      "${MIRROR_SITES[${mirror_key}:mpc]}/mpc-${mpc_version}.tar.gz"
+      
   test -f archives/isl-${isl_version}.tar.bz2 || \
-      curl -o archives/isl-${isl_version}.tar.bz2 ${isl_url}
-
-  # CLOOG
-  local cloog_url="${MIRROR_SITES[${mirror}:cloog]}/cloog-${cloog_version}.tar.gz"
+      curl -o archives/isl-${isl_version}.tar.bz2 \
+      "${MIRROR_SITES[${mirror_key}:isl]}/isl-${isl_version}.tar.bz2"
+      
   test -f archives/cloog-${cloog_version}.tar.gz || \
-      curl -o archives/cloog-${cloog_version}.tar.gz ${cloog_url}
-
-  # BINUTILS
-  local binutils_url="${MIRROR_SITES[${mirror}:binutils]}/binutils-${binutils_version}.tar.bz2"
+      curl -o archives/cloog-${cloog_version}.tar.gz \
+      "${MIRROR_SITES[${mirror_key}:cloog]}/cloog-${cloog_version}.tar.gz"
+      
   test -f archives/binutils-${binutils_version}.tar.bz2 || \
-      curl -o archives/binutils-${binutils_version}.tar.bz2 ${binutils_url}
-
-  # MUSL
-  local musl_url="${MIRROR_SITES[${mirror}:musl]}/${musl_version}"
+      curl -o archives/binutils-${binutils_version}.tar.bz2 \
+      "${MIRROR_SITES[${mirror_key}:binutils]}/binutils-${binutils_version}.tar.bz2"
+      
   test -f archives/musl-riscv-${musl_version}.tar.gz || \
-      curl -o archives/musl-riscv-${musl_version}.tar.gz ${musl_url}
-
-  # LINUX
-  local linux_url="${MIRROR_SITES[${mirror}:linux]}/linux-${linux_version}.tar.xz"
+      curl -o archives/musl-riscv-${musl_version}.tar.gz \
+      "${MIRROR_SITES[${mirror_key}:musl]}/${musl_version}"
+      
   test -f archives/linux-${linux_version}.tar.xz || \
-      curl -L -o archives/linux-${linux_version}.tar.xz ${linux_url}
-
-  # GCC
-  local gcc_url="${MIRROR_SITES[${mirror}:gcc]}/gcc-${gcc_version}.tar.xz"
+      curl -L -o archives/linux-${linux_version}.tar.xz \
+      "${MIRROR_SITES[${mirror_key}:linux]}/linux-${linux_version}.tar.xz"
+      
   test -f archives/gcc-${gcc_version}.tar.xz || \
-      curl -o archives/gcc-${gcc_version}.tar.xz ${gcc_url}
-
-  # GDB
-  local gdb_url="${MIRROR_SITES[${mirror}:gdb]}/gdb-${gdb_version}.tar.xz"
+      curl -o archives/gcc-${gcc_version}.tar.xz \
+      "${MIRROR_SITES[${mirror_key}:gcc]}/gcc-${gcc_version}.tar.xz"
+      
   test -f archives/gdb-${gdb_version}.tar.xz || \
-      curl -o archives/gdb-${gdb_version}.tar.xz ${gdb_url}
+      curl -o archives/gdb-${gdb_version}.tar.xz \
+      "${MIRROR_SITES[${mirror_key}:gdb]}/gdb-${gdb_version}.tar.xz"
 }
 
-# 解压所有下载的源码包
 extract_archives()
 {
-  # 依次解压各个组件的源码包到src目录
   test -d src/gmp-${gmp_version} || \
       tar -C src -xjf archives/gmp-${gmp_version}.tar.bz2
   test -d src/mpfr-${mpfr_version} || \
@@ -372,105 +288,17 @@ extract_archives()
       tar -C src -xJf archives/gdb-${gdb_version}.tar.xz
 }
 
-# 为musl打补丁,修复C++相关问题
 patch_musl()
 {
   test -f src/musl-riscv-${musl_version}/.patched || (
     set -e
     cd src/musl-riscv-${musl_version}
-    # 应用stdbool补丁以支持C++
     patch -p0 < ../../patches/musl-stdbool-cpluscplus.patch
     touch .patched
   )
   test "$?" -eq "0" || exit 1
 }
 
-# 配置musl的编译环境
-configure_musl()
-{
-  test -f stamps/musl-config-${ARCH} || (
-    set -e
-    # 复制源码到构建目录
-    rsync -a src/musl-riscv-${musl_version}/ build/musl-${ARCH}/
-    cd build/musl-${ARCH}
-    # 创建musl的配置文件
-    echo prefix= > config.mak
-    echo exec_prefix= >> config.mak
-    echo ARCH=${ARCH} >> config.mak
-    # 设置交叉编译工具链
-    echo CC=${PREFIX}/bin/${TRIPLE}-gcc >> config.mak
-    echo AS=${PREFIX}/bin/${TRIPLE}-as >> config.mak
-    echo LD=${PREFIX}/bin/${TRIPLE}-ld >> config.mak
-    echo AR=${PREFIX}/bin/${TRIPLE}-ar >> config.mak
-    echo RANLIB=${PREFIX}/bin/${TRIPLE}-ranlib >> config.mak
-    # 添加工具链目录到PATH
-    echo PATH=${PREFIX}/bin:\${PATH} >> config.mak
-    # 添加链接器标志
-    echo LDFLAGS=-B${PREFIX}/bin >> config.mak
-    # 添加交叉编译前缀
-    echo CROSS_COMPILE=${PREFIX}/bin/${TRIPLE}- >> config.mak
-  ) && touch stamps/musl-config-${ARCH}
-  test "$?" -eq "0" || exit 1
-}
-
-# 安装musl的头文件
-install_musl_headers()
-{
-  test -f stamps/musl-headers-${ARCH} || (
-    set -e
-    cd build/musl-${ARCH}
-    # 安装头文件到sysroot
-    make DESTDIR=${SYSROOT} install-headers
-    # 创建必要的符号链接
-    mkdir -p ${SYSROOT}/usr
-    test -L ${SYSROOT}/usr/lib || ln -s ../lib ${SYSROOT}/usr/lib
-    test -L ${SYSROOT}/usr/include || ln -s ../include ${SYSROOT}/usr/include
-  ) && touch stamps/musl-headers-${ARCH}
-  test "$?" -eq "0" || exit 1
-}
-
-# 构建musl C库
-build_musl()
-{
-  test -f stamps/musl-dynamic-${ARCH} || (
-    set -e
-    cd build/musl-${ARCH}
-    # 确保工具链在PATH中
-    export PATH=${PREFIX}/bin:${PATH}
-    # 显式设置链接器路径
-    export LD=${PREFIX}/bin/${TRIPLE}-ld
-    # 设置LDFLAGS以使用正确的链接器
-    export LDFLAGS="-B${PREFIX}/bin"
-    # 编译musl
-    make -j$(nproc) \
-      CROSS_COMPILE=${PREFIX}/bin/${TRIPLE}- \
-      LD="${PREFIX}/bin/${TRIPLE}-ld" \
-      LDFLAGS="${LDFLAGS}"
-    # 安装库文件到sysroot
-    make DESTDIR=${SYSROOT} install-libs
-  ) && touch stamps/musl-dynamic-${ARCH}
-  test "$?" -eq "0" || exit 1
-}
-
-# 安装Linux内核头文件
-install_linux_headers()
-{
-  test -f stamps/linux-headers-${ARCH} || (
-    set -e
-    mkdir -p build/linux-headers-${ARCH}/staged
-    # 从Linux源码安装头文件
-    ( cd src/linux-${linux_version} && \
-        make ARCH=${LINUX_ARCH} O=../../build/linux-headers-${ARCH} \
-             INSTALL_HDR_PATH=../../build/linux-headers-${ARCH}/staged headers_install )
-    # 清理不需要的文件
-    find build/linux-headers-${ARCH}/staged/include '(' -name .install -o -name ..install.cmd ')' -exec rm {} +
-    # 复制头文件到sysroot
-    rsync -a build/linux-headers-${ARCH}/staged/include/ ${SYSROOT}/usr/include/
-  ) && touch stamps/linux-headers-${ARCH}
-  test "$?" -eq "0" || exit 1
-}
-
-# 为GCC打补丁(当前未使用)
 patch_gcc()
 {
   test -f src/gcc-${gcc_version}/.patched || (
@@ -482,7 +310,96 @@ patch_gcc()
   test "$?" -eq "0" || exit 1
 }
 
-# BINUTILS (binutils_version=2.31.1)
+build_gmp()
+{
+  host=$1; shift
+  test -f stamps/lib-gmp-${host} || (
+    set -e
+    test -d build/gmp-${host} || mkdir build/gmp-${host}
+    cd build/gmp-${host}
+    CFLAGS=-fPIE ../../src/gmp-${gmp_version}/configure \
+        --disable-shared \
+        --prefix=${TOPDIR}/build/install-${host} \
+        $*
+    make -j$(nproc) && make install
+  ) && touch stamps/lib-gmp-${host}
+  test "$?" -eq "0" || exit 1
+}
+
+build_mpfr()
+{
+  host=$1; shift
+  test -f stamps/lib-mpfr-${host} || (
+    set -e
+    test -d build/mpfr-${host} || mkdir build/mpfr-${host}
+    cd build/mpfr-${host}
+    CFLAGS=-fPIE ../../src/mpfr-${mpfr_version}/configure \
+        --disable-shared \
+        --prefix=${TOPDIR}/build/install-${host} \
+        --with-gmp=${TOPDIR}/build/install-${host} \
+        $*
+    make -j$(nproc) && make install
+  ) && touch stamps/lib-mpfr-${host}
+  test "$?" -eq "0" || exit 1
+}
+
+build_mpc()
+{
+  host=$1; shift
+  test -f stamps/lib-mpc-${host} || (
+    set -e
+    test -d build/mpc-${host} || mkdir build/mpc-${host}
+    cd build/mpc-${host}
+    CFLAGS=-fPIE ../../src/mpc-${mpc_version}/configure \
+        --disable-shared \
+        --prefix=${TOPDIR}/build/install-${host} \
+        --with-gmp=${TOPDIR}/build/install-${host} \
+        --with-mpfr=${TOPDIR}/build/install-${host} \
+        $*
+    make -j$(nproc) && make install
+  ) && touch stamps/lib-mpc-${host}
+  test "$?" -eq "0" || exit 1
+}
+
+build_isl()
+{
+  host=$1; shift
+  if [ "${build_graphite}" = "yes" ]; then
+    test -f stamps/lib-isl-${host} || (
+      set -e
+      test -d build/isl-${host} || mkdir build/isl-${host}
+      cd build/isl-${host}
+      CFLAGS=-fPIE ../../src/isl-${isl_version}/configure \
+          --disable-shared \
+          --prefix=${TOPDIR}/build/install-${host} \
+          --with-gmp-prefix=${TOPDIR}/build/install-${host} \
+          $*
+      make -j$(nproc) && make install
+    ) && touch stamps/lib-isl-${host}
+    test "$?" -eq "0" || exit 1
+  fi
+}
+
+build_cloog()
+{
+  host=$1; shift
+  if [ "${build_graphite}" = "yes" ]; then
+    test -f stamps/lib-cloog-${host} || (
+      set -e
+      test -d build/cloog-${host} || mkdir build/cloog-${host}
+      cd build/cloog-${host}
+      CFLAGS=-fPIE ../../src/cloog-${cloog_version}/configure \
+          --disable-shared \
+          --prefix=${TOPDIR}/build/install-${host} \
+          --with-isl-prefix=${TOPDIR}/build/install-${host} \
+          --with-gmp-prefix=${TOPDIR}/build/install-${host} \
+          $*
+      make -j$(nproc) && make install
+    ) && touch stamps/lib-cloog-${host}
+    test "$?" -eq "0" || exit 1
+  fi
+}
+
 build_binutils()
 {
   host=$1; shift
@@ -501,7 +418,7 @@ build_binutils()
         --disable-nls \
         --disable-libssp \
         --disable-shared \
-        --disable-werror \
+        --disable-werror  \
         --disable-multilib \
         --with-gmp=${TOPDIR}/build/install-${host} \
         --with-mpfr=${TOPDIR}/build/install-${host} \
@@ -515,10 +432,54 @@ build_binutils()
   test "$?" -eq "0" || exit 1
 }
 
-# 构建第一阶段的GCC(只支持C语言)
+configure_musl()
+{
+  test -f stamps/musl-config-${ARCH} || (
+    set -e
+    rsync -a src/musl-riscv-${musl_version}/ build/musl-${ARCH}/
+    cd build/musl-${ARCH}
+    echo prefix= > config.mak
+    echo exec_prefix= >> config.mak
+    echo ARCH=${ARCH} >> config.mak
+    echo CC=${PREFIX}/bin/${TRIPLE}-gcc >> config.mak
+    echo AS=${PREFIX}/bin/${TRIPLE}-as >> config.mak
+    echo LD=${PREFIX}/bin/${TRIPLE}-ld >> config.mak
+    echo AR=${PREFIX}/bin/${TRIPLE}-ar >> config.mak
+    echo RANLIB=${PREFIX}/bin/${TRIPLE}-ranlib >> config.mak
+  ) && touch stamps/musl-config-${ARCH}
+  test "$?" -eq "0" || exit 1
+}
+
+install_musl_headers()
+{
+  test -f stamps/musl-headers-${ARCH} || (
+    set -e
+    cd build/musl-${ARCH}
+    make DESTDIR=${SYSROOT} install-headers
+    mkdir -p ${SYSROOT}/usr
+    test -L ${SYSROOT}/usr/lib || ln -s ../lib ${SYSROOT}/usr/lib
+    test -L ${SYSROOT}/usr/include || ln -s ../include ${SYSROOT}/usr/include
+  ) && touch stamps/musl-headers-${ARCH}
+  test "$?" -eq "0" || exit 1
+}
+
+install_linux_headers()
+{
+  test -f stamps/linux-headers-${ARCH} || (
+    set -e
+    mkdir -p build/linux-headers-${ARCH}/staged
+    ( cd src/linux-${linux_version} && \
+        make ARCH=${LINUX_ARCH} O=../../build/linux-headers-${ARCH} \
+             INSTALL_HDR_PATH=../../build/linux-headers-${ARCH}/staged headers_install )
+    find build/linux-headers-${ARCH}/staged/include '(' -name .install -o -name ..install.cmd ')' -exec rm {} +
+    rsync -a build/linux-headers-${ARCH}/staged/include/ ${SYSROOT}/usr/include/
+  ) && touch stamps/linux-headers-${ARCH}
+  test "$?" -eq "0" || exit 1
+}
+
 build_gcc_stage1()
 {
-  # musl编译器
+  # musl compiler
   host=$1; shift
   prefix=$1; shift
   destdir=$1; shift
@@ -571,10 +532,20 @@ build_gcc_stage1()
   test "$?" -eq "0" || exit 1
 }
 
-# 构建最终的GCC(支持C和C++)
+build_musl()
+{
+  test -f stamps/musl-dynamic-${ARCH} || (
+    set -e
+    cd build/musl-${ARCH}
+    make -j$(nproc)
+    make DESTDIR=${SYSROOT} install-libs
+  ) && touch stamps/musl-dynamic-${ARCH}
+  test "$?" -eq "0" || exit 1
+}
+
 build_gcc_stage2()
 {
-  # 最终编译器
+  # final compiler
   host=$1; shift
   prefix=$1; shift
   destdir=$1; shift
@@ -583,27 +554,15 @@ build_gcc_stage2()
     set -e
     test -d build/gcc-stage2-${host}-${ARCH} || mkdir build/gcc-stage2-${host}-${ARCH}
     cd build/gcc-stage2-${host}-${ARCH}
-    # 设置库目录为lib而不是lib64
-    export gcc_cv_lib_path=lib
-    CFLAGS_FOR_TARGET="${COMMON_FLAGS}" \
-    CXXFLAGS_FOR_TARGET="${COMMON_FLAGS}" \
-    CFLAGS="${COMMON_FLAGS} -fPIE" \
-    CXXFLAGS="${COMMON_FLAGS} -fPIE" \
-    LDFLAGS="${LDFLAGS_FOR_BUILD}" \
     CFLAGS=-fPIE ../../src/gcc-${gcc_version}/configure \
         --prefix=${prefix} \
         --target=${TARGET:=$TRIPLE} ${WITHARCH} \
         ${transform:+--program-transform-name='s&^&'${TRIPLE}'-&'} \
         --with-sysroot=${SYSROOT} \
-        --libdir=${prefix}/lib \
-        --with-slibdir=${prefix}/lib \
-        --enable-target-optspace \
-        --enable-multilib \
-        --with-multilib-list=rmprofile \
-        --with-specs="%{save-temps: -fverbose-asm} %{funwind-tables|fno-unwind-tables|mabi=*|ffreestanding|nostdlib:;:-funwind-tables}" \
         --with-gnu-as \
         --with-gnu-ld \
-        --enable-languages=c,c++,fortran,objc,obj-c++ \
+        --enable-languages=c,c++ \
+        --enable-target-optspace \
         --enable-initfini-array \
         --enable-zlib \
         --enable-libgcc \
@@ -612,29 +571,17 @@ build_gcc_stage2()
         --enable-threads \
         --enable-libatomic \
         --enable-libstdc__-v3 \
-        --enable-libgomp \
-        --enable-libquadmath \
-        --enable-libitm \
-        --enable-libssp \
-        --enable-libvtv \
-        --enable-libmpx \
-        --enable-libasan \
-        --enable-libtsan \
-        --enable-libubsan \
-        --enable-libcilkrts \
-        --enable-libstdcxx-time \
-        --enable-libstdcxx-filesystem-ts \
-        --enable-libstdcxx-threads \
-        --enable-gnu-indirect-function \
-        --enable-gnu-unique-object \
-        --enable-linker-build-id \
-        --enable-lto \
-        --enable-plugin \
-        --enable-default-pie \
-        --enable-default-ssp \
+        --disable-libquadmath \
+        --disable-libsanitizer \
+        --disable-libvtv \
+        --disable-libmpx \
         --disable-multilib \
+        --disable-libssp \
         --disable-libmudflap \
+        --disable-libgomp \
+        --disable-libitm \
         --disable-nls \
+        --disable-plugins \
         --disable-sjlj-exceptions \
         --disable-bootstrap \
         --with-gmp=${TOPDIR}/build/install-${host} \
@@ -645,57 +592,12 @@ build_gcc_stage2()
         ${build_graphite:+--with-isl=${TOPDIR}/build/install-${host}} \
         ${build_graphite:+--with-cloog=${TOPDIR}/build/install-${host}} \
         $*
-    make -j$(nproc) all
-    make DESTDIR=${destdir} install
-
-    # 构建特殊版本的libgcc
-    cd ${destdir}${prefix}/${TARGET}/lib
-    
-    # 创建nano版本
-    ${TRIPLE}-ar cr libgcc-nano.a $(${TRIPLE}-ar t libgcc.a | grep -v gcov)
-    ${TRIPLE}-ar cr libgcc-nano-nopic.a $(${TRIPLE}-ar t libgcc.a | grep -v gcov | grep -v pic)
-    
-    # 创建nopic版本
-    ${TRIPLE}-ar cr libgcc-nopic.a $(${TRIPLE}-ar t libgcc.a | grep -v pic)
-    
-    # 创建origin-noop版本
-    ${TRIPLE}-ar cr libgcc-origin-noop.a $(${TRIPLE}-ar t libgcc.a | grep -v gcov | grep -v unwind)
-    
-    # 确保所有.o文件都存在
-    for obj in crtbegin.o crtbeginS.o crtbeginT.o crtend.o crtendS.o crti.o crtn.o; do
-      if [ ! -f $obj ]; then
-        cp `${TRIPLE}-gcc -print-file-name=$obj` .
-      fi
-    done
-    
-    # 设置正确的权限
-    chmod 644 *.a *.o
-    
-    # 创建include目录结构
-    mkdir -p include/c++ include-fixed install-tools
-    
-    # 复制必要的头文件
-    cp -r ${destdir}${prefix}/lib/gcc/${TARGET}/${gcc_version}/include/* include/
-    cp -r ${destdir}${prefix}/lib/gcc/${TARGET}/${gcc_version}/include-fixed/* include-fixed/
-    cp -r ${destdir}${prefix}/lib/gcc/${TARGET}/${gcc_version}/install-tools/* install-tools/
-
-    # 确保所有库都被正确安装
-    if [ -d ${destdir}${prefix}/${TARGET}/lib ]; then
-      cd ${destdir}${prefix}/${TARGET}/lib
-      # 创建必要的符号链接
-      for lib in *.so.*; do
-        if [ -f "$lib" ]; then
-          base=$(echo $lib | sed 's/\.[0-9.]*$//')
-          ln -sf $lib ${base}
-          ln -sf $lib ${base}.0
-        fi
-      done
-    fi
+    make -j$(nproc) all-gcc all-target-libgcc all-target-libstdc++-v3
+    make DESTDIR=${destdir} install-gcc install-target-libgcc install-target-libstdc++-v3
   ) && touch stamps/gcc-stage2-${host}-${ARCH}
   test "$?" -eq "0" || exit 1
 }
 
-# 构建GDB调试器
 build_gdb()
 {
   host=$1; shift
@@ -708,11 +610,12 @@ build_gdb()
     cd build/gdb-${host}-${ARCH}
     CFLAGS=-fPIE ../../src/gdb-${gdb_version}/configure \
         --prefix=${prefix} \
-        --target=${TARGET:=$TRIPLE} ${WITHARCH} \
+        --target=${TARGET:=$TRIPLE} \
         ${transform:+--program-transform-name='s&^&'${TRIPLE}'-&'} \
         --with-sysroot=${SYSROOT} \
-        --disable-nls \
+        --with-python=no \
         --disable-werror \
+        --disable-nls \
         --disable-sim \
         --disable-gas \
         --disable-binutils \
@@ -720,16 +623,16 @@ build_gdb()
         --disable-gprof \
         --with-gmp=${TOPDIR}/build/install-${host} \
         --with-mpfr=${TOPDIR}/build/install-${host} \
-        --with-mpc=${TOPDIR}/build/install-${host} \
         $*
-    make -j$(nproc) && make DESTDIR=${destdir} install
+    make -j$(nproc) all
+    make DESTDIR=${destdir} install
   ) && touch stamps/gdb-${host}-${ARCH}
   test "$?" -eq "0" || exit 1
 }
 
 
 #
-# 为主机构建musl libc工具链
+# build musl libc toolchain for host
 #
 
 make_directories
@@ -738,29 +641,31 @@ extract_archives
 patch_musl
 patch_gcc
 
-# 按顺序构建所有组件
 build_gmp             host
 build_mpfr            host
 build_mpc             host
 build_isl             host
 build_cloog           host
 build_binutils        host ${PREFIX} / transform-name
+
 configure_musl
 install_musl_headers
 install_linux_headers
+
 build_gcc_stage1      host ${PREFIX} / transform-name
 build_musl
 build_gcc_stage2      host ${PREFIX} / transform-name
-build_gdb             host ${PREFIX} / transform-name
+build_gdb            host ${PREFIX} / transform-name
+
 
 #
-# 如果指定了native-cross选项，为目标架构构建本地工具链
+# build musl libc toolchain for target
 #
+
 if [ "$2" = "native-cross" ]; then
-  # 将新构建的工具链添加到PATH
+
   export PATH=${PREFIX}/bin:${PATH}
 
-  # 为目标架构构建所有组件
   build_gmp             ${ARCH} --host=${TRIPLE}
   build_mpfr            ${ARCH} --host=${TRIPLE}
   build_mpc             ${ARCH} --host=${TRIPLE}
@@ -769,4 +674,5 @@ if [ "$2" = "native-cross" ]; then
   build_binutils        ${ARCH} /usr ${SYSROOT} '' --host=${TRIPLE}
   build_gcc_stage2      ${ARCH} /usr ${SYSROOT} '' --host=${TRIPLE}
   build_gdb             ${ARCH} /usr ${SYSROOT} '' --host=${TRIPLE}
+
 fi
