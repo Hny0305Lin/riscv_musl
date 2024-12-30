@@ -504,7 +504,7 @@ build_binutils()
         --libdir=${prefix}/lib \
         --with-slibdir=${prefix}/lib \
         --enable-plugins \
-        --enable-gold \
+        --disable-gold \
         --enable-ld=default \
         --disable-nls \
         --disable-libssp \
@@ -523,15 +523,6 @@ build_binutils()
     
     # 创建bfd-plugins目录
     mkdir -p ${destdir}${prefix}/lib/bfd-plugins
-    
-    # 构建和安装libdep.so插件
-    if [ -f ${destdir}${prefix}/lib/gcc/${TARGET}/${gcc_version}/libcc1.so ]; then
-      # 复制libcc1.so作为libdep.so的基础
-      cp ${destdir}${prefix}/lib/gcc/${TARGET}/${gcc_version}/libcc1.so \
-         ${destdir}${prefix}/lib/bfd-plugins/libdep.so
-      # 设置正确的权限
-      chmod 755 ${destdir}${prefix}/lib/bfd-plugins/libdep.so
-    fi
     
   ) && touch stamps/binutils-${host}-${ARCH}
   test "$?" -eq "0" || exit 1
