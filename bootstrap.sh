@@ -482,6 +482,19 @@ patch_gcc()
   test "$?" -eq "0" || exit 1
 }
 
+# 添加新的patch_binutils函数
+patch_binutils()
+{
+  test -f src/binutils-${binutils_version}/.patched || (
+    set -e
+    cd src/binutils-${binutils_version}
+    # 应用gold链接器补丁
+    patch -p1 < ../../patches/binutils-gold-include.patch
+    touch .patched
+  )
+  test "$?" -eq "0" || exit 1
+}
+
 # BINUTILS (binutils_version=2.31.1)
 build_binutils()
 {
@@ -494,7 +507,7 @@ build_binutils()
     test -d build/binutils-${host}-${ARCH} || mkdir build/binutils-${host}-${ARCH}
     cd build/binutils-${host}-${ARCH}
     CFLAGS="${COMMON_FLAGS} -fPIE" \
-    CXXFLAGS="${COMMON_FLAGS} -fPIE" \
+    CXXFLAGS="${COMMON_FLAGS} -fPIE -include string" \
     LDFLAGS="${LDFLAGS_FOR_BUILD}" \
     ../../src/binutils-${binutils_version}/configure \
         --prefix=${prefix} \
@@ -509,7 +522,7 @@ build_binutils()
         --disable-nls \
         --disable-libssp \
         --disable-shared \
-        --disable-werror  \
+        --disable-werror \
         --disable-multilib \
         --with-gmp=${TOPDIR}/build/install-${host} \
         --with-mpfr=${TOPDIR}/build/install-${host} \
@@ -518,8 +531,8 @@ build_binutils()
         ${build_graphite:+--with-isl=${TOPDIR}/build/install-${host}} \
         ${build_graphite:+--with-cloog=${TOPDIR}/build/install-${host}} \
         $*
-    make -j$(nproc) all
-    make DESTDIR=${destdir} install
+    make -j$(nproc) all-binutils all-gas all-ld
+    make DESTDIR=${destdir} install-binutils install-gas install-ld
     
     # 创建bfd-plugins目录
     mkdir -p ${destdir}${prefix}/lib/bfd-plugins
@@ -750,6 +763,7 @@ download_prerequisites
 extract_archives
 patch_musl
 patch_gcc
+patch_binutils
 
 # 按顺序构建所有组件
 build_gmp             host
