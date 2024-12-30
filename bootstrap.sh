@@ -58,10 +58,10 @@ show_usage() {
     echo "支持的架构:"
     echo "  riscv32, riscv64, i386, x86_64, aarch64"
     echo ""
-    echo "示例:"
-    echo "  $0 -m china riscv64              # 使用清华镜像源构建RISC-V 64位交叉编译器"
-    echo "  $0 -m ustc -n aarch64            # 使用中科大镜像源构建ARM64交叉编译器和本地编译器"
-    echo "  $0 --mirror haohanyh riscv64     # 使用浩瀚银河镜像源构建RISC-V 64位交叉编译器"
+    echo "推荐示例:"
+    echo "  $0 -m default aarch64             # 使用默认镜像源构建ARM64交叉编译器"
+    echo "  $0 -m china -n riscv64            # 使用清华镜像源构建RISC-V 64位交叉编译器和本地编译器"
+    echo "  $0 -m ustc x86_64                 # 使用中科大镜像源构建x86_64交叉编译器"
 }
 
 # 解析命令行参数
@@ -80,7 +80,7 @@ while [[ $# -gt 0 ]]; do
             exit 0
             ;;
         clean)
-            echo "Cleaning build environment..."
+            echo "正在清理构建环境..."
             rm -rf build stamps archives src ${PREFIX}
             exit 0
             ;;
@@ -102,7 +102,6 @@ if [ -z "$ARCH_TYPE" ]; then
     show_usage
     exit 1
 fi
-
 # 验证镜像源
 case "$MIRROR" in
     default|china|ustc|haohanyh)
@@ -621,6 +620,7 @@ build_gdb()
         --disable-binutils \
         --disable-ld \
         --disable-gprof \
+        --disable-documentation \
         --with-gmp=${TOPDIR}/build/install-${host} \
         --with-mpfr=${TOPDIR}/build/install-${host} \
         $*
